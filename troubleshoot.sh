@@ -1,8 +1,9 @@
 #!/bin/bash
 
 # =============================================================================
-# YiZi AI V3.0 故障诊断和修复脚本
+# AI客服系统 (ai-kefu) 故障诊断和修复脚本
 # 用于诊断常见问题并提供自动修复方案
+# 适配项目: https://github.com/xinghe778/ai-kefu
 # 使用方法: curl -sSL https://.../troubleshoot.sh | bash
 # =============================================================================
 
@@ -427,7 +428,7 @@ show_final_recommendations() {
     echo "✅ PHP扩展: $(php -m | grep -c 'pdo_mysql') 个核心扩展"
     echo
     echo -e "${YELLOW}如果仍然遇到问题:${NC}"
-    echo "1. 📋 查看完整诊断报告: cat $report_file"
+    echo "1. 📋 查看完整诊断报告: cat /tmp/ai-kefu-diagnostic-report.txt"
     echo "2. 🔍 检查错误日志: tail -f /var/log/httpd/error_log"
     echo "3. 🌐 测试网站访问: curl http://localhost"
     echo "4. 🔄 重启所有服务: systemctl restart httpd mysqld"
@@ -441,7 +442,7 @@ show_final_recommendations() {
     echo "• 查看系统日志: journalctl -xe"
     echo
     echo -e "${YELLOW}联系技术支持时，请提供:${NC}"
-    echo "• 诊断报告文件: $report_file"
+    echo "• 诊断报告文件: /tmp/ai-kefu-diagnostic-report.txt"
     echo "• 操作系统版本: $(cat /etc/centos-release 2>/dev/null || echo '未知')"
     echo "• PHP版本: $(php -v 2>/dev/null | head -1 | cut -d' ' -f2 || echo '未知')"
     echo

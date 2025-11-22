@@ -1,19 +1,21 @@
 #!/bin/bash
 
 # =============================================================================
-# YiZi AI V3.0 快速安装脚本
+# AI客服系统 (ai-kefu) 快速安装脚本
 # 适用于 CentOS 7/8 - 最小化安装版本
-# 使用方法: curl -sSL https://raw.githubusercontent.com/your-repo/install-quick.sh | bash
+# 项目地址: https://github.com/xinghe778/ai-kefu
+# 使用方法: curl -sSL https://raw.githubusercontent.com/xinghe778/ai-kefu/install-quick.sh | bash
 # =============================================================================
 
 set -e
 set -u
 
 # 配置
-QUICK_INSTALL_URL="https://api.github.com/repos/your-username/yizi-ai/releases/latest"
+PROJECT_REPO="https://github.com/xinghe778/ai-kefu.git"
 WEB_USER="apache"
 WEB_GROUP="apache"
 DEFAULT_DOMAIN="localhost"
+INSTALL_DIR="/var/www/html/ai-kefu"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -56,146 +58,61 @@ one_click_install() {
     print_info "安装核心组件..."
     yum install -y -q epel-release yum-utils wget curl git
     
-    # 安装MySQL
-    print_info "安装MySQL 8.0..."
-    yum install -y -q mysql-server mysql
-    systemctl enable --now mysqld
-    
-    # 安装Apache
-    print_info "安装Apache 2.4..."
-    yum install -y -q httpd
-    systemctl enable --now httpd
-    
-    # 安装PHP 8.1+
-    print_info "安装PHP 8.1+..."
-    yum install -y -q yum-utils
-    yum install -y -q http://rpms.remirepo.net/enterprise/remi-release-8.rpm
-    
-    # 启用PHP模块
-    if command -v dnf &> /dev/null; then
-        dnf module reset php -y -q
-        dnf module enable php:remi-8.1 -y -q
+    # 检查并安装LAMP环境
+    if ! command -v php &> /dev/null; then
+        print_info "安装PHP 8.1+..."
+        yum install -y -q yum-utils
+        yum install -y -q http://rpms.remirepo.net/enterprise/remi-release-7.rpm || 
+        yum install -y -q http://rpms.remirepo.net/enterprise/remi-release-8.rpm
+        
+        yum-config-manager --enable remi-php74 2>/dev/null || true
+        yum install -y -q php php-mysql php-mysqli php-mbstring php-gd php-zip php-curl
     fi
     
-    yum install -y -q php php-mysql php-mysqli php-mbstring php-gd php-zip php-curl
+    if ! command -v mysql &> /dev/null; then
+        print_info "安装MySQL..."
+        yum install -y -q mysql-server mysql
+        systemctl enable --now mysqld
+    fi
     
-    print_success "核心组件安装完成"
+    if ! command -v httpd &> /dev/null; then
+        print_info "安装Apache..."
+        yum install -y -q httpd
+        systemctl enable --now httpd
+    fi
+    
+    print_success "核心组件检查完成"
 }
 
 # 快速部署
 quick_deploy() {
     print_info "快速部署应用..."
     
-    local install_dir="/var/www/yizi-ai"
+    local install_dir=$INSTALL_DIR
     
-    # 创建目录结构
-    mkdir -p "$install_dir"/{admin,css,js,images,logs,uploads}
+    # 备份现有安装
+    if [[ -d "$install_dir" ]]; then
+        mv "$install_dir" "${install_dir}.backup.$(date +%Y%m%d_%H%M%S)"
+    fi
     
-    # 创建基本文件
-    cat > "$install_dir/index.php" << 'EOF'
-<?php
-echo "<!DOCTYPE html>
-<html>
-<head>
-    <title>YiZi AI V3.0</title>
-    <link href='https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css' rel='stylesheet'>
-</head>
-<body class='bg-light'>
-<div class='container mt-5'>
-    <div class='text-center'>
-        <h1>🎉 YiZi AI V3.0 安装成功！</h1>
-        <p class='lead'>感谢使用 YiZi AI 智能聊天系统</p>
-        <a href='/admin/login.php' class='btn btn-primary btn-lg'>进入管理后台</a>
-        <hr>
-        <p><strong>下一步：</strong></p>
-        <ol class='text-start' style='max-width: 500px; margin: 0 auto;'>
-            <li>访问管理后台并设置API密钥</li>
-            <li>测试聊天功能</li>
-            <li>邀请用户注册使用</li>
-        </ol>
-    </div>
-</div>
-</body>
-</html>";
-?>
+    # 克隆项目
+    print_info \"从GitHub克隆项目...\"
+    mkdir -p "$install_dir"
+    cd "$install_dir"
+    git clone "$PROJECT_REPO" . || {
+        print_error \"项目克隆失败，请检查网络连接\"
+        exit 1
+    }
 EOF
 
-    # 创建数据库配置
-    cat > "$install_dir/config.php" << EOF
-<?php
-// YiZi AI V3.0 配置
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'api');
-define('DB_USER', 'api');
-define('DB_PASS', '$(openssl rand -base64 16 | tr -d "=+/" | cut -c1-16)');
-define('SITE_URL', 'http://$DEFAULT_DOMAIN');
-define('DEBUG_MODE', true);
-?>
-EOF
-
-    # 创建数据库连接
-    cat > "$install_DIR/db.php" << 'EOF'
-<?php
-require_once 'config.php';
-try {
-    $pdo = new PDO("mysql:host=".DB_HOST.";dbname=".DB_NAME.";charset=utf8", DB_USER, DB_PASS, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
-    ]);
-} catch (PDOException $e) {
-    die("数据库连接失败: " . $e->getMessage());
-}
-?>
-EOF
-
-    # 创建登录页面
-    mkdir -p "$install_dir/admin"
-    cat > "$install_dir/admin/login.php" << 'EOF'
-<?php
-session_start();
-?>
-<!DOCTYPE html>
-<html>
-<head>
-    <title>管理员登录 - YiZi AI</title>
-    <link href='https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css' rel='stylesheet'>
-</head>
-<body class='bg-dark'>
-<div class='container'>
-    <div class='row justify-content-center'>
-        <div class='col-md-6 col-lg-4' style='margin-top: 20vh;'>
-            <div class='card'>
-                <div class='card-body p-4'>
-                    <h3 class='text-center mb-4'>YiZi AI 管理员</h3>
-                    <form method='post'>
-                        <div class='mb-3'>
-                            <label class='form-label'>用户名</label>
-                            <input type='text' class='form-control' name='username' value='admin' readonly>
-                        </div>
-                        <div class='mb-3'>
-                            <label class='form-label'>密码</label>
-                            <input type='password' class='form-control' name='password' required>
-                        </div>
-                        <div class='d-grid'>
-                            <button class='btn btn-primary'>登录</button>
-                        </div>
-                    </form>
-                    <div class='text-center mt-3'>
-                        <small class='text-muted'>默认密码: admin</small>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-</body>
-</html>
-EOF
-
-    # 设置权限
+    # 设置文件权限
+    print_info "设置文件权限..."
     chown -R $WEB_USER:$WEB_GROUP "$install_dir"
     chmod -R 755 "$install_dir"
-    chmod -R 644 "$install_dir"/*.php
-    chmod -R 644 "$install_dir/admin"/*.php
+    chmod 644 *.php 2>/dev/null || true
+    chmod -R 755 admin/ uploads/ 2>/dev/null || true
+
+
     
     print_success "应用部署完成"
 }
@@ -222,52 +139,36 @@ INNER_EOF
     }
     
     # 创建应用数据库
-    local db_pass=$(grep "define('DB_PASS'" /var/www/yizi-ai/config.php | grep -o "'.*'" | tr -d "'")
-    mysql -uroot -proot123 << EOF
-CREATE DATABASE IF NOT EXISTS api CHARACTER SET utf8mb4;
-CREATE USER IF NOT EXISTS 'api'@'localhost' IDENTIFIED BY '$db_pass';
-GRANT ALL ON api.* TO 'api'@'localhost';
+    local db_name="ai_kefu"
+    local db_user="aikefu"
+    local db_pass=$(openssl rand -base64 12)
+    
+    mysql -uroot << EOF
+CREATE DATABASE IF NOT EXISTS \`${db_name}\` CHARACTER SET utf8mb4;
+CREATE USER IF NOT EXISTS '${db_user}'@'localhost' IDENTIFIED BY '${db_pass}';
+GRANT ALL ON \`${db_name}\`.* TO '${db_user}'@'localhost';
 FLUSH PRIVILEGES;
 EOF
 
-    # 导入基本表结构
-    mysql -uapi -p"$db_pass" api << 'EOF'
-CREATE TABLE IF NOT EXISTS users (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    username VARCHAR(50) UNIQUE,
-    password VARCHAR(255),
-    email VARCHAR(100),
-    role ENUM('user','admin') DEFAULT 'user',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS chat_logs (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT,
-    username VARCHAR(50),
-    message TEXT,
-    response TEXT,
-    model_used VARCHAR(100),
-    tokens_used INT,
-    response_time DECIMAL(10,3),
-    ip_address VARCHAR(45),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS settings (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    api_key VARCHAR(255),
-    api_url VARCHAR(255) DEFAULT 'https://api.spanstar.cn',
-    prompt TEXT,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-
-INSERT INTO users (username, password, role) VALUES 
-('admin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin');
-
-INSERT INTO settings (api_key, prompt) VALUES 
-('', '你是一个有用的AI助手，请用友好、专业的方式回答用户的问题。');
+    # 保存数据库配置
+    cat > /tmp/db_credentials.txt << EOF
+数据库名称: ${db_name}
+数据库用户: ${db_user}
+数据库密码: ${db_pass}
+数据库主机: localhost
+配置时间: $(date)
 EOF
+    chmod 600 /tmp/db_credentials.txt
+    
+    # 如果项目有数据库初始化脚本，执行它
+    if [[ -f "$install_dir/complete_database_fix.sql" ]]; then
+        print_info "执行数据库初始化脚本..."
+        mysql -u "$db_user" -p"$db_pass" "$db_name" < "$install_dir/complete_database_fix.sql" 2>/dev/null || {
+            print_warning "数据库初始化脚本执行失败，请手动执行"
+        }
+    fi
+    
+    print_success "数据库创建完成"
 
     print_success "数据库初始化完成"
 }
@@ -277,19 +178,27 @@ quick_web_config() {
     print_info "配置Web服务器..."
     
     # 创建虚拟主机配置
-    cat > /etc/httpd/conf.d/yizi-ai.conf << 'EOF'
+    cat > /etc/httpd/conf.d/ai-kefu.conf << EOF
 <VirtualHost *:80>
-    DocumentRoot /var/www/yizi-ai
+    DocumentRoot $INSTALL_DIR
     ServerName localhost
     
-    <Directory /var/www/yizi-ai>
+    <Directory $INSTALL_DIR>
         AllowOverride All
         Require all granted
     </Directory>
     
-    <Directory /var/www/yizi-ai/logs>
-        Deny from all
+    <Directory $INSTALL_DIR/admin>
+        <Files "*.php">
+            Order deny,allow
+            Deny from all
+            Allow from 127.0.0.1
+            Allow from ::1
+        </Files>
     </Directory>
+    
+    ErrorLog /var/log/httpd/ai-kefu-error.log
+    CustomLog /var/log/httpd/ai-kefu-access.log combined
 </VirtualHost>
 EOF
 
@@ -337,19 +246,25 @@ final_check() {
 show_result() {
     echo
     echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║                    🎉 YiZi AI V3.0 安装成功！                     ║${NC}"
+    echo -e "${GREEN}║                🎉 AI客服系统安装成功！                       ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
     echo
     echo -e "${YELLOW}访问信息:${NC}"
     echo -e "  🌐 网站地址: ${BLUE}http://localhost${NC}"
-    echo -e "  🔑 管理后台: ${BLUE}http://localhost/admin/login.php${NC}"
-    echo -e "  📧 默认用户: ${GREEN}admin${NC}"
-    echo -e "  🔐 默认密码: ${GREEN}admin${NC}"
+    echo -e "  🔧 项目目录: ${BLUE}$INSTALL_DIR${NC}"
+    echo -e "  📋 故障排除: ${BLUE}./troubleshoot.sh${NC}"
+    
+    if [[ -f "/tmp/db_credentials.txt" ]]; then
+        echo -e "\n${YELLOW}数据库配置:${NC}"
+        cat /tmp/db_credentials.txt | while read line; do
+            echo -e "  $line"
+        done
+    fi
     echo
-    echo -e "${YELLOW}重要提醒:${NC}"
-    echo "  1. 请立即修改默认管理员密码"
-    echo "  2. 在设置中配置您的API密钥"
-    echo "  3. 测试聊天功能"
+    echo -e "${YELLOW}下一步操作:${NC}"
+    echo "  1. 查看项目README.md了解配置"
+    echo "  2. 在管理后台配置API密钥"
+    echo "  3. 测试系统功能"
     echo
     echo -e "${YELLOW}服务管理:${NC}"
     echo "  重启Apache: systemctl restart httpd"
@@ -363,7 +278,7 @@ main() {
     echo -e "${BLUE}"
     cat << 'EOF'
 ╔════════════════════════════════════════════════════════════╗
-║                   YiZi AI V3.0 快速安装                    ║
+║              AI客服系统 (ai-kefu) 快速安装                  ║
 ║                      一键部署版本                           ║
 ╚════════════════════════════════════════════════════════════╝
 EOF
@@ -380,4 +295,4 @@ EOF
 }
 
 # 运行主程序
-main "$@" 2>&1 | tee /var/log/yizi-ai-quick-install.log
+main "$@" 2>&1 | tee /var/log/ai-kefu-quick-install.log
