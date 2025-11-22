@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>YiZi AI - 智能客服</title>
+    
+    <!-- CDN 资源 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css" rel="stylesheet">
+    
+    <!-- 第三方库 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@2.3.2/dist/purify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
+
+    <style>
+        /* 主题色定义 */
+        :root {
+            --primary-900: #1e3b8a;
+            --primary-600: #2563eb;
+            --primary-400: #93c5fd;
+            --secondary-600: #7c3aed;
+            --accent-400: #fb923c;
+            --surface-1: #f8f9fa;
+            --surface-2: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --shadow-lg: 0 12px 24px -6px rgba(0,0,0,0.1);
+        }
+
+        /* 深色模式 */
+        [data-bs-theme="dark"] {
+            --surface-1: #1a1a1a;
+            --surface-2: #2c2c2c;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            background: var(--surface-1);
+            color: var(--text-primary);
+            font-family: 'Inter', system-ui, sans-serif;
+            line-height: 1.6;
+        }
+
+        /* 容器布局 */
+        .chat-container {
+            max-width: 900px;
+            width: 100%;
+            margin: 2rem auto;
+            border-radius: 1.5rem;
+            overflow: hidden;
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            flex-direction: column;
+            background: var(--surface-2);
+            transition: all 0.3s ease;
+        }
+
+        /* 页眉样式 */
+        .chat-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+            background: linear-gradient(145deg, var(--primary-600), var(--secondary-600));
+            color: white;
+        }
+
+        .chat-header h5 {
+            margin: 0;
+            font-weight: 600;
+            font-size: 1.25rem;
+        }
+
+        /* 模型选择 */
+        .model-select {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+            background: var(--surface-2);
+        }
+
+        /* 聊天历史 */
+        .chat-history {
+            flex: 1;
+            overflow-y: auto;
+            padding: 2rem 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            max-height: calc(100vh - 320px);
+            scroll-behavior: smooth;
+        }
+
+        /* 消息气泡 */
+        .message-bubble {
+            padding: 1rem 1.25rem;
+            border-radius: 1rem;
+            position: relative;
+            max-width: 80%;
+            animation: fadeInUp 0.4s ease-out;
+        }
+
+        .user-message {
+            align-self: flex-end;
+            background: var(--primary-600);
+            color: white;
+            border-radius: 1.5rem 0.5rem 0.5rem 0.5rem;
+        }
+
+        .assistant-message {
+            align-self: flex-start;
+            background: var(--surface-2);
+            border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 0.5rem 1.5rem 0.5rem 0.5rem;
+        }
+
+        /* 输入区域 */
+        .input-panel {
+            border-top: 1px solid rgba(0,0,0,0.08);
+            padding: 1.5rem;
+            background: var(--surface-2);
+        }
+
+        /* 文件上传 */
+        .file-dropzone {
+            border: 2px dashed rgba(37,99,235,0.2);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .file-dropzone:hover {
+            border-color: var(--primary-400);
+            background: rgba(37,99,235,0.03);
+        }
+
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            .chat-container {
+                margin: 1rem;
+                border-radius: 0;
+            }
+            
+            .chat-history {
+                padding: 1.5rem 1rem;
+            }
+            
+            .message-bubble {
+                max-width: 100%;
+            }
+        }
+
+        /* 动画 */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 打字效果 */
+        .typing-cursor {
+            display: inline-block;
+            width: 8px;
+            height: 1.2em;
+            background: var(--primary-400);
+            margin-left: 2px;
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        /* 主题切换按钮 */
+        .theme-toggle {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background: var(--surface-2);
+            border: 1px solid rgba(0,0,0,0.1);
+            border-radius: 50%;
+            padding: 0.5rem;
+            z-index: 1000;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .theme-toggle:hover {
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+<body data-bs-theme="light">
+    <!-- 主题切换按钮 -->
+    <button class="theme-toggle" onclick="toggleTheme()" aria-label="切换主题">
+        <i class="fas fa-moon" id="theme-icon"></i>
+    </button>
+
+    <!-- 聊天容器 -->
+    <div class="chat-container">
+        <!-- 页眉 -->
+        <div class="chat-header d-flex align-items-center">
+            <i class="fas fa-robot me-2"></i>
+            <h5>YiZi AI 客服助手</h5>
+        </div>
+
+        <!-- 模型选择 -->
+        <div class="model-select">
+            <label for="modelSelect" class="form-label">选择模型：</label>
+            <select id="modelSelect" class="form-select">
+                <option value="">加载中...</option>
+            </select>
+        </div>
+
+        <!-- 聊天历史 -->
+        <div class="chat-history" id="chatWindow">
+            <!-- 欢迎信息 -->
+            <div class="welcome-message text-center py-5">
+                <div class="mb-4" style="font-size: 3.5rem">🚀</div>
+                <h2 class="mb-3 fw-semibold">欢迎使用 YiZi AI</h2>
+                <p class="text-muted">您的智能生产力伙伴</p>
+                <div class="mt-4">
+                    <button class="btn btn-outline-light rounded-pill" onclick="showExamples()">
+                        <i class="fas fa-lightbulb me-2"></i>查看示例问题
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 输入面板 -->
+        <div class="input-panel">
+            <!-- 文件上传区 -->
+            <div class="file-dropzone mb-3" 
+                 onclick="document.getElementById('fileUpload').click()"
+                 ondragover="event.preventDefault(); this.classList.add('dragover')"
+                 ondragleave="this.classList.remove('dragover')"
+                 ondrop="handleFileDrop(event)">
+                <i class="fas fa-cloud-upload-alt me-2"></i>
+                拖放文件或点击上传
+                <input type="file" id="fileUpload" class="d-none" accept=".txt,.pdf,.docx,.md,.csv">
+                <div id="fileName" class="mt-2 text-muted small"></div>
+            </div>
+            
+            <!-- 输入框 -->
+            <div class="input-group">
+                <textarea id="messageInput" 
+                         class="form-control ps-4 pe-5 py-3" 
+                         placeholder="输入消息..."
+                         rows="3"
+                         style="border-radius: 1.25rem; resize: none;"
+                         oninput="adjustInputHeight(this)"></textarea>
+                <button class="btn btn-primary rounded-pill position-absolute end-0 bottom-0 m-2"
+                        onclick="sendMessage()">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- 底部版权 -->
+        <footer class="mt-auto py-3 text-center text-muted small">
+            <div class="container">
+                <i class="bi bi-c-circle me-1"></i>
+                <a href="https://yiziyun.com/" target="_blank" class="text-decoration-none text-muted">亦梓科技</a> © 2025
+            </div>
+        </footer>
+    </div>
+
+    <!-- 脚本 -->
+    <script>
+        // 初始化 AOS 动画
+        document.addEventListener('DOMContentLoaded', function () {
+            AOS.init({
+                duration: 600,
+                once: true
+            });
+            loadModels();
+            loadHistory();
+            setupFileUpload();
+            updateThemeIcon(localStorage.getItem('theme') || 'light');
+        });
+
+        // 自动调整输入框高度
+        function adjustInputHeight(el) {
+            el.style.height = 'auto';
+            el.style.height = Math.min(el.scrollHeight, 150) + 'px';
+        }
+
+        // 获取当前时间
+        function getCurrentTime() {
+            const now = new Date();
+            return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // 添加消息
+        function addMessage(content, isUser = false) {
+            const chatWindow = document.getElementById('chatWindow');
+            
+            // 创建消息容器
+            const messageGroup = document.createElement('div');
+            messageGroup.className = 'message-group';
+            
+            // 创建消息头
+            const messageHeader = document.createElement('div');
+            messageHeader.className = 'd-flex align-items-center mb-1';
+            
+            // 创建头像
+            const avatar = document.createElement('div');
+            avatar.className = `rounded-circle d-flex align-items-center justify-content-center me-2 ${isUser ? 'bg-primary' : 'bg-secondary'}`;
+            avatar.style.width = '24px';
+            avatar.style.height = '24px';
+            avatar.style.fontSize = '0.8rem';
+            avatar.style.color = 'white';
+            avatar.textContent = isUser ? '你' : 'AI';
+            
+            // 创建内容容器
+            const contentContainer = document.createElement('div');
+            contentContainer.className = 'flex-grow-1';
+            
+            // 创建消息气泡
+            const messageBubble = document.createElement('div');
+            messageBubble.className = `message-bubble ${isUser ? 'user-message' : 'assistant-message'}`;
+            messageBubble.innerHTML = `<div class="markdown-content">${DOMPurify.sanitize(marked.parse(content))}</div>`;
+            
+            // 创建时间戳
+            const timestamp = document.createElement('div');
+            timestamp.className = 'small mt-1 text-end text-muted';
+            timestamp.textContent = getCurrentTime();
+            
+            // 组装结构
+            messageHeader.appendChild(avatar);
+            messageHeader.appendChild(document.createTextNode(isUser ? '用户' : '助手'));
+            
+            contentContainer.appendChild(messageBubble);
+            if (isUser) contentContainer.appendChild(timestamp);
+            
+            messageGroup.appendChild(messageHeader);
+            messageGroup.appendChild(contentContainer);
+            
+            chatWindow.appendChild(messageGroup);
+            scrollToBottom();
+            
+            // 保存到本地存储
+            saveMessage(content, isUser);
+            return messageGroup;
+        }
+
+        // 显示打字指示器
+        function showTypingIndicator() {
+            const chatWindow = document.getElementById('chatWindow');
+            const typingGroup = document.createElement('div');
+            typingGroup.className = 'message-group';
+            typingGroup.id = 'typing-indicator';
+            
+            // 创建消息头
+            const messageHeader = document.createElement('div');
+            messageHeader.className = 'd-flex align-items-center mb-1';
+            
+            // 创建头像
+            const avatar = document.createElement('div');
+            avatar.className = 'rounded-circle bg-secondary d-flex align-items-center justify-content-center me-2';
+            avatar.style.width = '24px';
+            avatar.style.height = '24px';
+            avatar.style.fontSize = '0.8rem';
+            avatar.style.color = 'white';
+            avatar.textContent = 'AI';
+            
+            // 创建内容容器
+            const contentContainer = document.createElement('div');
+            contentContainer.className = 'flex-grow-1';
+            
+            // 创建打字动画
+            const typingIndicator = document.createElement('div');
+            typingIndicator.className = 'd-flex align-items-center p-2 rounded';
+            typingIndicator.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+            
+            for (let i = 0; i < 3; i++) {
+                const dot = document.createElement('div');
+                dot.className = 'dot mx-1';
+                dot.style.width = '6px';
+                dot.style.height = '6px';
+                dot.style.borderRadius = '50%';
+                dot.style.backgroundColor = '#64748b';
+                dot.style.animation = 'bounce 1.4s infinite ease-in-out both';
+                dot.style.animationDelay = `${i * -0.32}s`;
+                typingIndicator.appendChild(dot);
+            }
+            
+            contentContainer.appendChild(typingIndicator);
+            messageHeader.appendChild(avatar);
+            messageHeader.appendChild(document.createTextNode('助手'));
+            typingGroup.appendChild(messageHeader);
+            typingGroup.appendChild(contentContainer);
+            chatWindow.appendChild(typingGroup);
+            scrollToBottom();
+            return typingGroup;
+        }
+
+        // 加载模型
+        async function loadModels() {
+            try {
+                const response = await fetch('admin/modelapi.php?action=models');
+                const result = await response.json();
+                
+                const select = document.getElementById('modelSelect');
+                select.innerHTML = '<option value="">加载中...</option>';
+                
+                if (result.models && result.models.length > 0) {
+                    select.innerHTML = '';
+                    result.models.forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = model;
+                        option.textContent = model;
+                        select.appendChild(option);
+                    });
+                } else {
+                    select.innerHTML = '<option value="">获取模型失败</option>';
+                }
+            } catch (error) {
+                console.error('加载模型错误:', error);
+                document.getElementById('modelSelect').innerHTML = '<option value="">网络异常</option>';
+            }
+        }
+
+        // 保存消息
+        function saveMessage(message, isUser) {
+            const history = JSON.parse(localStorage.getItem('chatHistory') || '[]');
+            history.push({
+                message,
+                isUser,
+                timestamp: new Date().toISOString()
+            });
+            localStorage.setItem('chatHistory', JSON.stringify(history));
+        }
+
+        // 加载历史记录
+        function loadHistory() {
+            const history = JSON.parse(localStorage.getItem('chatHistory') || '[]');
+            history.forEach(msg => {
+                addMessage(msg.message, msg.isUser);
+            });
+        }
+
+        // 滚动到底部
+        function scrollToBottom() {
+            const chat = document.getElementById('chatWindow');
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        // 文件上传设置
+        function setupFileUpload() {
+            const fileUpload = document.getElementById('fileUpload');
+            const fileNameDisplay = document.getElementById('fileName');
+
+            fileUpload.addEventListener('change', () => {
+                if (fileUpload.files.length > 0) {
+                    fileNameDisplay.textContent = `📄 ${fileUpload.files[0].name}`;
+                } else {
+                    fileNameDisplay.textContent = '';
+                }
+            });
+
+            // 拖拽上传
+            fileUpload.closest('.file-dropzone').addEventListener('dragover', e => {
+                e.preventDefault();
+                e.currentTarget.classList.add('dragover');
+            });
+
+            fileUpload.closest('.file-dropzone').addEventListener('dragleave', e => {
+                e.preventDefault();
+                e.currentTarget.classList.remove('dragover');
+            });
+
+            fileUpload.closest('.file-dropzone').addEventListener('drop', e => {
+                e.preventDefault();
+                e.currentTarget.classList.remove('dragover');
+                if (e.dataTransfer.files.length > 0) {
+                    fileUpload.files = e.dataTransfer.files;
+                    fileNameDisplay.textContent = `📄 ${e.dataTransfer.files[0].name}`;
+                }
+            });
+        }
+
+        // 处理文件拖放
+        function handleFileDrop(event) {
+            event.preventDefault();
+            const fileInput = document.getElementById('fileUpload');
+            fileInput.files = event.dataTransfer.files;
+            document.getElementById('fileName').textContent = `📄 ${event.dataTransfer.files[0].name}`;
+        }
+
+        // 发送消息
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            const model = document.getElementById('modelSelect').value;
+            const fileInput = document.getElementById('fileUpload');
+            
+            if (!message && !fileInput.files.length) return;
+
+            // 清空输入框
+            input.value = '';
+            input.style.height = 'auto';
+            document.getElementById('fileName').textContent = '';
+            fileInput.value = '';
+
+            // 添加用户消息
+            addMessage(message, true);
+
+            // 显示打字指示器
+            const typingIndicator = showTypingIndicator();
+
+            // 准备请求数据
+            const payload = {
+                message,
+                model,
+                history: JSON.parse(localStorage.getItem('chatHistory') || '[]')
+            };
+
+            // 处理文件上传
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                const reader = new FileReader();
+                
+                reader.onload = async function(e) {
+                    payload.file = {
+                        content: e.target.result.split(',')[1],
+                        name: file.name,
+                        type: file.type,
+                        size: file.size
+                    };
+                    
+                    try {
+                        const response = await fetch('admin/modelapi.php', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(payload)
+                        });
+                        
+                        const data = await response.json();
+                        typingIndicator.remove();
+                        
+                        if (data.reply) {
+                            addMessage(data.reply, false);
+                        } else {
+                            addMessage('无法获取回复，请重试。', false);
+                        }
+                    } catch (error) {
+                        typingIndicator.remove();
+                        addMessage(`请求失败: ${error.message}`, false);
+                    }
+                };
+                
+                reader.readAsDataURL(file);
+            } else {
+                // 无文件时直接发送
+                try {
+                    const response = await fetch('admin/modelapi.php', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    const data = await response.json();
+                    typingIndicator.remove();
+                    
+                    if (data.reply) {
+                        addMessage(data.reply, false);
+                    } else {
+                        addMessage('无法获取回复，请重试。', false);
+                    }
+                } catch (error) {
+                    typingIndicator.remove();
+                    addMessage(`请求失败: ${error.message}`, false);
+                }
+            }
+        }
+
+        // 回车发送
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // 主题切换
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-bs-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-bs-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        }
+
+        function updateThemeIcon(theme) {
+            const icon = document.getElementById('theme-icon');
+            icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+        }
+
+        // 示例问题
+        function showExamples() {
+            const examples = [
+                "如何使用Markdown格式？",
+                "请解释量子计算的基本原理",
+                "帮我写一个项目计划书模板",
+                "用Python实现斐波那契数列"
+            ];
+            
+            const exampleModal = document.createElement('div');
+            exampleModal.className = 'modal fade';
+            exampleModal.innerHTML = `
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">示例问题</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <ul class="list-group">
+                                ${examples.map(ex => `<li class="list-group-item list-group-item-action example-item" onclick="useExample('${ex}')">${ex}</li>`).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(exampleModal);
+            new bootstrap.Modal(exampleModal).show();
+        }
+
+        // 使用示例
+        function useExample(text) {
+            document.getElementById('messageInput').value = text;
+            sendMessage();
+            document.querySelector('.modal .btn-close').click();
+        }
+    </script>
+</body>
+</html>
